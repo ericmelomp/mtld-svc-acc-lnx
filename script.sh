@@ -187,7 +187,7 @@ for idx in "${!SERVERS[@]}"; do
     if ssh "${SSH_OPTS[@]}" "$server" "$CHECK_ALREADY_CMD" 2>/dev/null; then
         SKIP_COUNT=$((SKIP_COUNT + 1))
         SKIP_SERVERS+=("$server")
-        echo -e "  ${BLUE}${B}⊙ Já configurado${R}  $server"
+        echo -e "  ${BLUE}${B}⊙ Skipped${R}  $server"
         echo -e "  ${D}→ Utilizador matilda-srv, chave e sudo NOPASSWD já existem; nada a fazer.${R}"
         echo ""
         continue
@@ -219,7 +219,7 @@ echo -e "${CYAN}${B}════════════════════
 echo -e "  ${B}Resumo da execução${R}"
 echo -e "${CYAN}${B}═══════════════════════════════════════════════════════════════════════════${R}"
 echo ""
-echo -e "  ${GREEN}${B}Sucesso:${R} ${OK_COUNT}  ${BLUE}${B}Já config.:${R} ${SKIP_COUNT}  ${RED}${B}Falha:${R} ${FAIL_COUNT}  ${B}Total:${R} ${TOTAL}"
+echo -e "  ${GREEN}${B}Sucesso:${R} ${OK_COUNT}  ${BLUE}${B}Skipped:${R} ${SKIP_COUNT}  ${RED}${B}Falha:${R} ${FAIL_COUNT}  ${B}Total:${R} ${TOTAL}"
 echo ""
 if [[ ${#OK_SERVERS[@]} -gt 0 ]]; then
     echo -e "  ${GREEN}Servidores configurados (agora):${R}"
@@ -227,7 +227,7 @@ if [[ ${#OK_SERVERS[@]} -gt 0 ]]; then
     echo ""
 fi
 if [[ ${#SKIP_SERVERS[@]} -gt 0 ]]; then
-    echo -e "  ${BLUE}Servidores já configurados (omitidos):${R}"
+    echo -e "  ${BLUE}Servidores skipped:${R}"
     for s in "${SKIP_SERVERS[@]}"; do echo -e "    ${BLUE}⊙${R} $s"; done
     echo ""
 fi
