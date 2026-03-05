@@ -94,19 +94,36 @@ if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
     eval "$(ssh-agent -s)"
     AGENT_STARTED=1
     if [[ -n "$SSH_KEY_PASSPHRASE" ]]; then
-        export SSH_ASKPASS_REQUIRE=force
-        # Não definir DISPLAY: em servidor sem X (ex.: GCP), DISPLAY=:0 faz ssh-add travar
-        # à espera de um display. Sem DISPLAY, ssh-add usa SSH_ASKPASS corretamente.
-        unset DISPLAY
+        # ssh-add pode ser invocado com ambiente limpo (sem SSH_KEY_PASSPHRASE), por isso
+        # gravamos a senha dentro do script askpass (escapada) em vez de usar a variável.
         TMP_ASKPASS=$(mktemp 2>/dev/null || echo /tmp/ssh_askpass_$$)
-        # Askpass que lê a senha da variável (não grava a senha em disco)
-        printf '#!/bin/sh\nprintf "%%s" "${SSH_KEY_PASSPHRASE}"\n' > "$TMP_ASKPASS"
+        # Escapar para uso dentro de single-quoted sh: ' -> '\''
+        PP_ESC=$(printf '%s' "$SSH_KEY_PASSPHRASE" | sed "s/'/'\\\\''/g")
+        printf '#!/bin/sh\nprintf "%%s" '\''%s'\''\n' "$PP_ESC" > "$TMP_ASKPASS"
         chmod 700 "$TMP_ASKPASS"
         export SSH_ASKPASS="$TMP_ASKPASS"
-        # Sem TTY o ssh-add usa SSH_ASKPASS; com TTY às vezes espera teclado e trava
-        ( exec 0</dev/null; ssh-add "$SSH_KEY" )
+        export SSH_ASKPASS_REQUIRE=force
+        unset DISPLAY
+        # Forçar uso do askpass: DISPLAY vazio faz alguns ssh-add ignorarem askpass;
+        # usar valor dummy faz ssh-add usar askpass sem tentar abrir X.
+        export DISPLAY=dummy:0
+        ADD_CMD="exec 0</dev/null; ssh-add \"\$SSH_KEY\""
+        if command -v timeout >/dev/null 2>&1; then
+            ADD_CMD="timeout 15 $ADD_CMD"
+        fi
+        if ( eval "$ADD_CMD" 2>/dev/null ); then
+            :
+        else
+            # Fallback: pseudo-TTY para poder introduzir a senha manualmente
+            echo -e "${YELLOW}ssh-add por variável falhou. A introduzir senha manualmente (copie/cole se tiver):${R}" >&2
+            if command -v script >/dev/null 2>&1; then
+                script -q -c "ssh-add \"$SSH_KEY\"" /dev/null 2>/dev/null || ssh-add "$SSH_KEY" || true
+            else
+                ssh-add "$SSH_KEY" || true
+            fi
+        fi
         rm -f "$TMP_ASKPASS"
-        unset SSH_ASKPASS SSH_ASKPASS_REQUIRE
+        unset SSH_ASKPASS SSH_ASKPASS_REQUIRE DISPLAY
     else
         if [[ ! -t 0 ]]; then
             echo -e "${RED}Sem TTY e SSH_KEY_PASSPHRASE não definida. Defina a variável ou execute com terminal interativo.${R}" >&2
