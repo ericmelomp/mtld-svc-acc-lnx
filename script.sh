@@ -143,6 +143,20 @@ exec 3>&1
 exec 1> >(tee >(sed $'s/\033\\[[0-9;]*m//g' > "$RESULT_FILE") >&3)
 exec 2>&1
 
+echo -e "${MAGENTA}"
+echo " .d8888b.                                 .d8888b.                    888          "
+echo "d88P  Y88b                               d88P  Y88b                   888          "
+echo "888    888                               Y88b.                        888          "
+echo "888         .d88b.  888d888 .d88b.        \"Y888b.    .d8888b  8888b.  888  .d88b.  "
+echo "888        d88\"\"88b 888P\"  d8P  Y8b          \"Y88b. d88P\"        \"88b 888 d8P  Y8b "
+echo "888    888 888  888 888    88888888            \"888 888      .d888888 888 88888888 "
+echo "Y88b  d88P Y88..88P 888    Y8b.          Y88b  d88P Y88b.    888  888 888 Y8b.     "
+echo " \"Y8888P\"   \"Y88P\"  888     \"Y8888        \"Y8888P\"   \"Y8888P \"Y888888 888  \"Y8888  "
+echo ""
+echo ""
+echo ""
+echo -e "${R}"
+
 RUN_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 BOX_W=72
 L1="  Configuração remota: utilizador matilda-srv (conta de serviço)"
