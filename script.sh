@@ -19,7 +19,7 @@ fi
 # =============================================================================
 # VARIÁVEIS OBRIGATÓRIAS (preencher antes de executar)
 # =============================================================================
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/ec2-key.pem}"           # Caminho da chave privada para conectar aos servidores
+SSH_KEY="${SSH_KEY:-}"           # Caminho da chave privada para conectar aos servidores
 SSH_KEY="${SSH_KEY/#\~/$HOME}"                         # Expande ~ para $HOME (Git Bash / Windows)
 SERVER_LIST="${SERVER_LIST:-servers.txt}"              # Ficheiro com a lista de servidores (um por linha: user@host)
 
