@@ -107,13 +107,14 @@ if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
         # Forçar uso do askpass: DISPLAY vazio faz alguns ssh-add ignorarem askpass;
         # usar valor dummy faz ssh-add usar askpass sem tentar abrir X.
         export DISPLAY=dummy:0
-        ADD_CMD="exec 0</dev/null; ssh-add \"\$SSH_KEY\""
+        # timeout deve envolver o ssh-add (máx. 15s) para não travar
+        ADD_OK=
         if command -v timeout >/dev/null 2>&1; then
-            ADD_CMD="timeout 15 $ADD_CMD"
-        fi
-        if ( eval "$ADD_CMD" 2>/dev/null ); then
-            :
+            timeout 15 bash -c 'exec 0</dev/null; ssh-add "$SSH_KEY"' 2>/dev/null && ADD_OK=1
         else
+            ( exec 0</dev/null; ssh-add "$SSH_KEY" ) 2>/dev/null && ADD_OK=1
+        fi
+        if [[ -z "$ADD_OK" ]]; then
             # Fallback: pseudo-TTY para poder introduzir a senha manualmente
             echo -e "${YELLOW}ssh-add por variável falhou. A introduzir senha manualmente (copie/cole se tiver):${R}" >&2
             if command -v script >/dev/null 2>&1; then
