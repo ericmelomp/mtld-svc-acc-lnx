@@ -95,7 +95,9 @@ if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
     AGENT_STARTED=1
     if [[ -n "$SSH_KEY_PASSPHRASE" ]]; then
         export SSH_ASKPASS_REQUIRE=force
-        export DISPLAY=:0
+        # Não definir DISPLAY: em servidor sem X (ex.: GCP), DISPLAY=:0 faz ssh-add travar
+        # à espera de um display. Sem DISPLAY, ssh-add usa SSH_ASKPASS corretamente.
+        unset DISPLAY
         TMP_ASKPASS=$(mktemp 2>/dev/null || echo /tmp/ssh_askpass_$$)
         # Askpass que lê a senha da variável (não grava a senha em disco)
         printf '#!/bin/sh\nprintf "%%s" "${SSH_KEY_PASSPHRASE}"\n' > "$TMP_ASKPASS"
