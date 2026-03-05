@@ -87,7 +87,8 @@ fi
 CMD="$(printf '%s && ' "${CMDS[@]}" | sed 's/ && $//')"
 
 # Comando para verificar se a máquina já tem matilda-srv configurado (evita reconfigurar)
-CHECK_ALREADY_CMD='sudo id matilda-srv &>/dev/null && sudo test -s /home/matilda-srv/.ssh/authorized_keys && sudo grep -q "NOPASSWD" /etc/sudoers.d/matilda-srv 2>/dev/null && sudo -n -u matilda-srv sudo whoami 2>/dev/null | grep -qx root'
+# Redirecionamento POSIX (>/dev/null 2>&1); &> não existe em /bin/sh (dash)
+CHECK_ALREADY_CMD='sudo id matilda-srv >/dev/null 2>&1 && sudo test -s /home/matilda-srv/.ssh/authorized_keys && sudo grep -q NOPASSWD /etc/sudoers.d/matilda-srv 2>/dev/null'
 
 SSH_OPTS=(-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR)
 [[ -n "$SSH_KEY" ]] && SSH_OPTS+=(-i "$SSH_KEY")
