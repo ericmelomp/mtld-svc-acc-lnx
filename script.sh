@@ -86,6 +86,9 @@ if [[ ${#CMDS[@]} -eq 0 ]]; then
 fi
 CMD="$(printf '%s && ' "${CMDS[@]}" | sed 's/ && $//')"
 
+# Comando para verificar se a máquina já tem matilda-srv configurado (evita reconfigurar)
+CHECK_ALREADY_CMD='sudo id matilda-srv &>/dev/null && sudo test -s /home/matilda-srv/.ssh/authorized_keys && sudo grep -q "NOPASSWD" /etc/sudoers.d/matilda-srv 2>/dev/null && sudo -n -u matilda-srv sudo whoami 2>/dev/null | grep -qx root'
+
 SSH_OPTS=(-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR)
 [[ -n "$SSH_KEY" ]] && SSH_OPTS+=(-i "$SSH_KEY")
 
@@ -156,6 +159,7 @@ echo -e "  ${D}5.${R} Instalar dependências: bc, net-tools (yum ou apt)"
 echo -e "  ${D}6.${R} Testar sudo sem senha (sudo whoami → root)"
 echo -e "  ${D}7.${R} Validar comandos: netstat, ss, dmidecode, crontab, route"
 echo -e "  ${D}8.${R} Garantir que o serviço SSH está ativo (sshd ou ssh)"
+echo -e "  ${D}→ Se o servidor já tiver matilda-srv com chave e sudo NOPASSWD, será omitido.${R}"
 echo ""
 echo -e "  ${D}Chave SSH (conexão):${R} $SSH_KEY"
 echo -e "  ${D}Chave matilda-srv (deploy):${R} $MATILDA_PUBKEY_FILE"
@@ -164,9 +168,11 @@ echo ""
 
 OK_COUNT=0
 FAIL_COUNT=0
+SKIP_COUNT=0
 TOTAL=${#SERVERS[@]}
 OK_SERVERS=()
 FAIL_SERVERS=()
+SKIP_SERVERS=()
 
 for idx in "${!SERVERS[@]}"; do
     server="${SERVERS[idx]}"
@@ -175,6 +181,17 @@ for idx in "${!SERVERS[@]}"; do
     echo -e "${MAGENTA}${B}┌─────────────────────────────────────────────────────────────────────────┐${R}"
     echo -e "${MAGENTA}${B}│${R}  ${B}Servidor ${current}/${TOTAL}${R}  ${CYAN}${server}${R}"
     echo -e "${MAGENTA}${B}└─────────────────────────────────────────────────────────────────────────┘${R}"
+
+    # Verificar se já está configurado
+    if ssh "${SSH_OPTS[@]}" "$server" "$CHECK_ALREADY_CMD" 2>/dev/null; then
+        SKIP_COUNT=$((SKIP_COUNT + 1))
+        SKIP_SERVERS+=("$server")
+        echo -e "  ${BLUE}${B}⊙ Já configurado${R}  $server"
+        echo -e "  ${D}→ Utilizador matilda-srv, chave e sudo NOPASSWD já existem; nada a fazer.${R}"
+        echo ""
+        continue
+    fi
+
     echo -e "  ${D}Saída dos comandos no servidor:${R}"
     echo ""
 
@@ -185,10 +202,11 @@ for idx in "${!SERVERS[@]}"; do
         echo -e "  ${GREEN}${B}✓ Concluído com sucesso${R}  $server"
         echo -e "  ${D}→ Utilizador matilda-srv criado, chave implantada, sudo sem senha ativo, dependências e SSH verificados.${R}"
     else
+        ssh_exit=$?
         FAIL_COUNT=$((FAIL_COUNT + 1))
         FAIL_SERVERS+=("$server")
         echo ""
-        echo -e "  ${RED}${B}✗ Falha${R}  $server (código de saída: $?)"
+        echo -e "  ${RED}${B}✗ Falha${R}  $server (código de saída: $ssh_exit)"
         echo -e "  ${D}→ Verifique a saída acima e a conectividade/permissões no servidor.${R}" >&2
     fi
     echo ""
@@ -200,11 +218,16 @@ echo -e "${CYAN}${B}════════════════════
 echo -e "  ${B}Resumo da execução${R}"
 echo -e "${CYAN}${B}═══════════════════════════════════════════════════════════════════════════${R}"
 echo ""
-echo -e "  ${GREEN}${B}Sucesso:${R} ${OK_COUNT}  ${RED}${B}Falha:${R} ${FAIL_COUNT}  ${B}Total:${R} ${TOTAL}"
+echo -e "  ${GREEN}${B}Sucesso:${R} ${OK_COUNT}  ${BLUE}${B}Já config.:${R} ${SKIP_COUNT}  ${RED}${B}Falha:${R} ${FAIL_COUNT}  ${B}Total:${R} ${TOTAL}"
 echo ""
 if [[ ${#OK_SERVERS[@]} -gt 0 ]]; then
-    echo -e "  ${GREEN}Servidores configurados:${R}"
+    echo -e "  ${GREEN}Servidores configurados (agora):${R}"
     for s in "${OK_SERVERS[@]}"; do echo -e "    ${GREEN}✓${R} $s"; done
+    echo ""
+fi
+if [[ ${#SKIP_SERVERS[@]} -gt 0 ]]; then
+    echo -e "  ${BLUE}Servidores já configurados (omitidos):${R}"
+    for s in "${SKIP_SERVERS[@]}"; do echo -e "    ${BLUE}⊙${R} $s"; done
     echo ""
 fi
 if [[ ${#FAIL_SERVERS[@]} -gt 0 ]]; then
