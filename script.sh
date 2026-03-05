@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Execução: curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh | bash
+# Obrigatório: export SSH_KEY="$HOME/.ssh/sua_chave.pem"
+# Opcional: export SSH_KEY_PASSPHRASE="senha"  export SERVER_LIST=/caminho/servers.txt
+# Lista de servidores: um por linha (user@host). Por defeito: servers.txt no cwd ou ~/tmp/.mtld-svc-acc/servers.txt quando executado via curl|bash
 
 set -e
 
@@ -28,12 +32,20 @@ SERVER_LIST="${SERVER_LIST:-servers.txt}"              # Ficheiro com a lista de
 # =============================================================================
 SSH_KEY_PASSPHRASE="${SSH_KEY_PASSPHRASE:-}"          # Senha da chave SSH; vazio = pede ao executar
 RESULT_FILE="${RESULT_FILE:-result.txt}"               # Ficheiro onde guardar o resultado da execução
-MATILDA_KEY_BASE="${MATILDA_KEY_BASE:-}"              # Caminho base da chave matilda_srv (vazio = pasta do script)
+MATILDA_KEY_BASE="${MATILDA_KEY_BASE:-}"              # Caminho base da chave matilda_srv (vazio = pasta do script ou ~/tmp/.mtld-svc-acc)
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Quando executado via curl|bash não há ficheiro do script; usar ~/tmp/.mtld-svc-acc
+if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="${HOME}/tmp/.mtld-svc-acc"
+    mkdir -p "$SCRIPT_DIR"
+fi
 if [[ -z "$MATILDA_KEY_BASE" ]]; then
     MATILDA_KEY_BASE="$SCRIPT_DIR/matilda_srv_key"
 fi
+# Quando executado via curl|bash, procurar servers.txt em ~/tmp/.mtld-svc-acc
+[[ "$SCRIPT_DIR" == "$HOME/tmp/.mtld-svc-acc" ]] && SERVER_LIST="${SERVER_LIST:-$SCRIPT_DIR/servers.txt}"
 
 if [[ ! -f "$SERVER_LIST" ]]; then
     echo -e "${RED}Obrigatório: ficheiro de servidores não encontrado: $SERVER_LIST${R}" >&2
