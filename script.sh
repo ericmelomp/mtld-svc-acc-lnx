@@ -144,12 +144,27 @@ exec 1> >(tee >(sed $'s/\033\\[[0-9;]*m//g' > "$RESULT_FILE") >&3)
 exec 2>&1
 
 RUN_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+BOX_W=72
+L1="  Configuração remota: utilizador matilda-srv (conta de serviço)"
+L2="  ${#SERVERS[@]} servidor(es) · ${#CMDS[@]} passos · ${RUN_TIME}"
+# Padding até BOX_W para alinhar o canto direito
+L1_len=${#L1}
+L2_len=${#L2}
+L1_pad=$((BOX_W - L1_len))
+L2_pad=$((BOX_W - L2_len))
+[[ $L1_pad -lt 0 ]] && L1_pad=0
+[[ $L2_pad -lt 0 ]] && L2_pad=0
+printf -v PAD1 '%*s' "$L1_pad" ''
+printf -v PAD2 '%*s' "$L2_pad" ''
+# Linha de = sem depender de seq
+EQ_LINE=""
+for ((i=0;i<BOX_W;i++)); do EQ_LINE="${EQ_LINE}="; done
 
 echo ""
-echo -e "${CYAN}${B}╔══════════════════════════════════════════════════════════════════════════╗${R}"
-echo -e "${CYAN}${B}║${R}  ${B}Configuração remota: utilizador matilda-srv (conta de serviço)${R}                 ${CYAN}${B}║${R}"
-echo -e "${CYAN}${B}║${R}  ${#SERVERS[@]} servidor(es) · ${#CMDS[@]} passos · ${RUN_TIME}${R}        ${CYAN}${B}║${R}"
-echo -e "${CYAN}${B}╚══════════════════════════════════════════════════════════════════════════╝${R}"
+echo -e "${CYAN}${B}+${EQ_LINE}+${R}"
+echo -e "${CYAN}${B}|${R}${B}${L1}${R}${PAD1}${CYAN}${B}|${R}"
+echo -e "${CYAN}${B}|${R}${B}${L2}${R}${PAD2}${CYAN}${B}|${R}"
+echo -e "${CYAN}${B}+${EQ_LINE}+${R}"
 echo ""
 echo -e "${B}O que será feito em cada servidor:${R}"
 echo -e "  ${D}1.${R} Criar utilizador matilda-srv (bash, home) e bloquear login por senha"
