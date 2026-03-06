@@ -8,6 +8,20 @@
 
 set -e
 
+# Quando executado por pipe (curl | bash), o stdin é o próprio script. Qualquer leitura de stdin
+# (ex.: ssh-add no fallback) consome o resto do script e o código aparece no ecrã. Gravar o
+# script num ficheiro e reexecutar com stdin do terminal evita isso.
+if [[ ! -t 0 ]]; then
+    SCRIPT_TMP=$(mktemp 2>/dev/null || echo "/tmp/mtld-svc-acc-$$.sh")
+    export _MTLD_SCRIPT_TMP="$SCRIPT_TMP"
+    cat > "$SCRIPT_TMP"
+    if [[ -e /dev/tty ]]; then
+        exec bash "$SCRIPT_TMP" 0</dev/tty
+    else
+        exec bash "$SCRIPT_TMP"
+    fi
+fi
+
 if [[ -t 1 ]]; then
     R="\033[0m"
     B="\033[1m"
@@ -269,3 +283,5 @@ fi
 echo -e "  ${D}Em cada servidor com sucesso: utilizador $SVC_ACC_USER (login por senha), sudo NOPASSWD, bc/net-tools e SSH ativo.${R}"
 echo -e "${CYAN}${B}═══════════════════════════════════════════════════════════════════════════${R}"
 echo ""
+# Limpar script temporário quando executado via curl|bash (reexec)
+[[ -n "${_MTLD_SCRIPT_TMP:-}" && -f "${_MTLD_SCRIPT_TMP}" ]] && rm -f "$_MTLD_SCRIPT_TMP"
