@@ -137,10 +137,10 @@ if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
             ( exec 0</dev/null; ssh-add "$SSH_KEY" ) 2>/dev/null && ADD_OK=1
         fi
         if [[ -z "$ADD_OK" ]]; then
-            # Fallback: pseudo-TTY para poder introduzir a senha manualmente
-            echo -e "${YELLOW}ssh-add por variável falhou. A introduzir senha manualmente (copie/cole se tiver):${R}" >&2
-            if command -v script >/dev/null 2>&1; then
-                script -q -c "ssh-add \"$SSH_KEY\"" /dev/null 2>/dev/null || ssh-add "$SSH_KEY" || true
+            # Fallback: ler senha do terminal. Usar </dev/tty para não ler do pipe (evita travar quando curl|bash)
+            echo -e "${YELLOW}Não foi possível usar SSH_KEY_PASSPHRASE. Introduza a senha da chave .pem abaixo (cole e Enter). Sem senha? Prima Enter.${R}" >&2
+            if [[ -e /dev/tty ]]; then
+                ssh-add "$SSH_KEY" < /dev/tty 2>/dev/null || true
             else
                 ssh-add "$SSH_KEY" || true
             fi
@@ -149,11 +149,16 @@ if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
         unset SSH_ASKPASS SSH_ASKPASS_REQUIRE DISPLAY
     else
         if [[ ! -t 0 ]]; then
-            echo -e "${RED}Sem TTY e SSH_KEY_PASSPHRASE não definida. Defina a variável ou execute com terminal interativo.${R}" >&2
+            echo -e "${RED}Sem TTY e SSH_KEY_PASSPHRASE não definida.${R}" >&2
+            echo -e "${D}Defina antes de executar: export SSH_KEY_PASSPHRASE=\"senha_da_chave_pem\"${R}" >&2
             exit 1
         fi
-        echo -e "${YELLOW}Introduza a senha da chave (se tiver):${R}"
-        ssh-add "$SSH_KEY"
+        echo -e "${YELLOW}Introduza a senha da chave .pem (se tiver; sem senha prima Enter):${R}" >&2
+        if [[ -e /dev/tty ]]; then
+            ssh-add "$SSH_KEY" < /dev/tty
+        else
+            ssh-add "$SSH_KEY"
+        fi
     fi
 fi
 
