@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Execução: curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh | bash
-# Obrigatório: export SSH_KEY="$HOME/.ssh/sua_chave.pem"
+# Obrigatório: export SSH_KEY="$HOME/.ssh/sua_chave.pem"  (para o executor conectar aos servidores)
+# Obrigatório: export MATILDA_SVC_ACC_PASSWORD="senha"     (senha do utilizador matilda-svc-acc nos alvos)
+# Opcional: export SVC_ACC_USER="outro_user"  (default: matilda-svc-acc)
 # Opcional: export SSH_KEY_PASSPHRASE="senha"  export SERVER_LIST=/caminho/servers.txt
-# Lista de servidores: um por linha (user@host). Por defeito: servers.txt no cwd ou ~/tmp/.mtld-svc-acc/servers.txt quando executado via curl|bash
+# Acesso nos servidores: utilizador (SVC_ACC_USER) com senha (sem chaves .pem).
 
 set -e
 
@@ -23,16 +25,17 @@ fi
 # =============================================================================
 # VARIÁVEIS OBRIGATÓRIAS (preencher antes de executar)
 # =============================================================================
-SSH_KEY="${SSH_KEY:-}"           # Caminho da chave privada para conectar aos servidores
-SSH_KEY="${SSH_KEY/#\~/$HOME}"                         # Expande ~ para $HOME (Git Bash / Windows)
-SERVER_LIST="${SERVER_LIST:-servers.txt}"              # Ficheiro com a lista de servidores (um por linha: user@host)
+SSH_KEY="${SSH_KEY:-}"                    # Caminho da chave privada para conectar aos servidores
+SSH_KEY="${SSH_KEY/#\~/$HOME}"            # Expande ~ para $HOME (Git Bash / Windows)
+SERVER_LIST="${SERVER_LIST:-servers.txt}" # Ficheiro com a lista de servidores (um por linha: user@host)
 
 # =============================================================================
 # VARIÁVEIS OPCIONAIS (valores por defeito; alterar só se precisar)
 # =============================================================================
-SSH_KEY_PASSPHRASE="${SSH_KEY_PASSPHRASE:-}"          # Senha da chave SSH; vazio = pede ao executar
-RESULT_FILE="${RESULT_FILE:-result.txt}"               # Ficheiro onde guardar o resultado da execução
-MATILDA_KEY_BASE="${MATILDA_KEY_BASE:-}"              # Caminho base da chave matilda_srv (vazio = pasta do script ou ~/tmp/.mtld-svc-acc)
+SSH_KEY_PASSPHRASE="${SSH_KEY_PASSPHRASE:-}"                              # Senha da chave SSH do executor; vazio = pede ao executar
+SVC_ACC_USER="${SVC_ACC_USER:-matilda-svc-acc}"                           # Nome do utilizador a criar nos servidores (default: matilda-svc-acc)
+MATILDA_SVC_ACC_PASSWORD="${MATILDA_SVC_ACC_PASSWORD:-EdP2#87m62\Z/%eP}"  # Senha do utilizador (SVC_ACC_USER) nos servidores alvo
+RESULT_FILE="${RESULT_FILE:-result.txt}"                                  # Ficheiro onde guardar o resultado da execução
 
 # Quando executado via curl|bash não há ficheiro do script; usar ~/tmp/.mtld-svc-acc
 if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
@@ -40,9 +43,6 @@ if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
 else
     SCRIPT_DIR="${HOME}/tmp/.mtld-svc-acc"
     mkdir -p "$SCRIPT_DIR"
-fi
-if [[ -z "$MATILDA_KEY_BASE" ]]; then
-    MATILDA_KEY_BASE="$SCRIPT_DIR/matilda_srv_key"
 fi
 # Quando executado via curl|bash, procurar servers.txt em ~/tmp/.mtld-svc-acc
 [[ "$SCRIPT_DIR" == "$HOME/tmp/.mtld-svc-acc" ]] && SERVER_LIST="${SERVER_LIST:-$SCRIPT_DIR/servers.txt}"
@@ -56,6 +56,11 @@ if [[ ! -f "$SSH_KEY" ]]; then
     echo -e "${D}Defina SSH_KEY com o caminho completo (ex.: export SSH_KEY=\"\$HOME/.ssh/sua_chave.pem\")${R}" >&2
     exit 1
 fi
+if [[ -z "$MATILDA_SVC_ACC_PASSWORD" ]]; then
+    echo -e "${RED}Obrigatório: MATILDA_SVC_ACC_PASSWORD não definida.${R}" >&2
+    echo -e "${D}Defina a senha do utilizador $SVC_ACC_USER (ex.: export MATILDA_SVC_ACC_PASSWORD=\"sua_senha\")${R}" >&2
+    exit 1
+fi
 
 mapfile -t SERVERS < <(grep -v '^[[:space:]]*#' "$SERVER_LIST" | grep -v '^[[:space:]]*$' || true)
 if [[ ${#SERVERS[@]} -eq 0 ]]; then
@@ -63,31 +68,19 @@ if [[ ${#SERVERS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-if [[ ! -f "$MATILDA_KEY_BASE" ]]; then
-    ssh-keygen -t ed25519 -f "$MATILDA_KEY_BASE" -C "matilda-service-account" -N ""
-fi
-MATILDA_PUBKEY_FILE="${MATILDA_KEY_BASE}.pub"
-if [[ ! -f "$MATILDA_PUBKEY_FILE" ]]; then
-    echo -e "${RED}Ficheiro de chave pública não encontrado: $MATILDA_PUBKEY_FILE${R}" >&2
-    exit 1
-fi
-MATILDA_PUBKEY_B64=$(base64 < "$MATILDA_PUBKEY_FILE" | tr -d '\n')
-SUDOERS_B64=$(printf '%s\n' 'Defaults:matilda-srv !requiretty' 'matilda-srv ALL=(ALL) NOPASSWD: ALL' | base64 | tr -d '\n')
+# Senha em base64 para passar ao comando remoto (evita caracteres especiais no shell)
+MATILDA_PASS_B64=$(printf '%s' "$MATILDA_SVC_ACC_PASSWORD" | base64 -w 0 2>/dev/null || printf '%s' "$MATILDA_SVC_ACC_PASSWORD" | base64 | tr -d '\n')
+SUDOERS_B64=$(printf '%s\n' "Defaults:${SVC_ACC_USER} !requiretty" "${SVC_ACC_USER} ALL=(ALL) NOPASSWD: ALL" | base64 | tr -d '\n')
 
 CMDS=(
-    "sudo useradd -m -s /bin/bash matilda-srv 2>/dev/null || true"
-    "sudo passwd -l matilda-srv"
-    "sudo mkdir -p /home/matilda-srv/.ssh"
-    "sudo chmod 700 /home/matilda-srv/.ssh"
-    "sudo chown -R matilda-srv:matilda-srv /home/matilda-srv/.ssh"
-    "echo '$MATILDA_PUBKEY_B64' | base64 -d | sudo tee /home/matilda-srv/.ssh/authorized_keys"
-    "sudo chmod 600 /home/matilda-srv/.ssh/authorized_keys"
-    "sudo chown matilda-srv:matilda-srv /home/matilda-srv/.ssh/authorized_keys"
-    "echo '$SUDOERS_B64' | base64 -d | sudo tee /etc/sudoers.d/matilda-srv"
-    "sudo chmod 440 /etc/sudoers.d/matilda-srv"
+    "sudo useradd -m -s /bin/bash $SVC_ACC_USER 2>/dev/null || true"
+    "echo \"${SVC_ACC_USER}:\$(echo $MATILDA_PASS_B64 | base64 -d)\" | sudo chpasswd"
+    "echo '$SUDOERS_B64' | base64 -d | sudo tee /etc/sudoers.d/$SVC_ACC_USER"
+    "sudo chmod 440 /etc/sudoers.d/$SVC_ACC_USER"
     "sudo grep -q '^[^#]*Defaults.*requiretty' /etc/sudoers && sudo cp /etc/sudoers /etc/sudoers.bak.requiretty && sudo sed -i 's/^\([^#]*Defaults.*requiretty\)/# \\1/' /etc/sudoers && sudo visudo -c || true"
+    "(sudo sed -i 's/^#* *PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null; sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null); true"
     "(command -v apt-get >/dev/null 2>&1 && sudo apt-get update -qq && sudo apt-get install -y bc net-tools) || (command -v yum >/dev/null 2>&1 && sudo yum install -y bc net-tools) || true"
-    "sudo su - matilda-srv -c 'sudo -l' && sudo su - matilda-srv -c 'sudo whoami'"
+    "sudo su - $SVC_ACC_USER -c 'sudo whoami'"
     "(sudo netstat -anlp 2>/dev/null; sudo ss -tunlp 2>/dev/null; sudo dmidecode -s system-manufacturer 2>/dev/null; sudo crontab -l 2>/dev/null; sudo route -n 2>/dev/null; sudo readlink -f /proc/1/exe 2>/dev/null; sudo ifconfig -a 2>/dev/null || sudo ip a 2>/dev/null); true"
     "(sudo systemctl enable sshd 2>/dev/null && sudo systemctl start sshd 2>/dev/null) || (sudo systemctl enable ssh 2>/dev/null && sudo systemctl start ssh 2>/dev/null); (sudo systemctl is-active sshd 2>/dev/null || sudo systemctl is-active ssh 2>/dev/null)"
 )
@@ -98,9 +91,8 @@ if [[ ${#CMDS[@]} -eq 0 ]]; then
 fi
 CMD="$(printf '%s && ' "${CMDS[@]}" | sed 's/ && $//')"
 
-# Comando para verificar se a máquina já tem matilda-srv configurado (evita reconfigurar)
-# Redirecionamento POSIX (>/dev/null 2>&1); &> não existe em /bin/sh (dash)
-CHECK_ALREADY_CMD='sudo id matilda-srv >/dev/null 2>&1 && sudo test -s /home/matilda-srv/.ssh/authorized_keys && sudo grep -q NOPASSWD /etc/sudoers.d/matilda-srv 2>/dev/null'
+# Comando para verificar se a máquina já tem o utilizador configurado (evita reconfigurar)
+CHECK_ALREADY_CMD='sudo id '"$SVC_ACC_USER"' >/dev/null 2>&1 && sudo grep -q NOPASSWD /etc/sudoers.d/'"$SVC_ACC_USER"' 2>/dev/null'
 
 SSH_OPTS=(-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR)
 [[ -n "$SSH_KEY" ]] && SSH_OPTS+=(-i "$SSH_KEY")
@@ -169,7 +161,7 @@ echo -e "${R}"
 
 RUN_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 BOX_W=72
-L1="  Configuração remota: utilizador matilda-srv (conta de serviço)"
+L1="  Configuração remota: utilizador $SVC_ACC_USER (conta de serviço)"
 L2="  ${#SERVERS[@]} servidor(es) · ${#CMDS[@]} passos · ${RUN_TIME}"
 # Padding até BOX_W para alinhar o canto direito
 L1_len=${#L1}
@@ -191,18 +183,17 @@ echo -e "${CYAN}${B}|${R}${B}${L2}${R}${PAD2}${CYAN}${B}|${R}"
 echo -e "${CYAN}${B}+${EQ_LINE}+${R}"
 echo ""
 echo -e "${B}O que será feito em cada servidor:${R}"
-echo -e "  ${D}1.${R} Criar utilizador matilda-srv (bash, home) e bloquear login por senha"
-echo -e "  ${D}2.${R} Criar ~/.ssh, implantar chave pública e configurar authorized_keys"
-echo -e "  ${D}3.${R} Configurar sudo sem senha (NOPASSWD) em /etc/sudoers.d/matilda-srv"
-echo -e "  ${D}4.${R} Comentar Defaults requiretty em /etc/sudoers (se existir)"
+echo -e "  ${D}1.${R} Criar utilizador $SVC_ACC_USER (bash, home) com senha"
+echo -e "  ${D}2.${R} Configurar sudo sem senha (NOPASSWD) em /etc/sudoers.d/$SVC_ACC_USER"
+echo -e "  ${D}3.${R} Comentar Defaults requiretty em /etc/sudoers (se existir)"
+echo -e "  ${D}4.${R} Ativar PasswordAuthentication no sshd (login por senha)"
 echo -e "  ${D}5.${R} Instalar dependências: bc, net-tools (yum ou apt)"
 echo -e "  ${D}6.${R} Testar sudo sem senha (sudo whoami → root)"
 echo -e "  ${D}7.${R} Validar comandos: netstat, ss, dmidecode, crontab, route"
 echo -e "  ${D}8.${R} Garantir que o serviço SSH está ativo (sshd ou ssh)"
-echo -e "  ${D}→ Se o servidor já tiver matilda-srv com chave e sudo NOPASSWD, será omitido.${R}"
+echo -e "  ${D}→ Se o servidor já tiver $SVC_ACC_USER e sudo NOPASSWD, será omitido.${R}"
 echo ""
-echo -e "  ${D}Chave SSH (conexão):${R} $SSH_KEY"
-echo -e "  ${D}Chave matilda-srv (deploy):${R} $MATILDA_PUBKEY_FILE"
+echo -e "  ${D}Chave SSH (conexão do executor):${R} $SSH_KEY"
 echo -e "  ${D}Resultado guardado em:${R} $RESULT_FILE"
 echo ""
 
@@ -227,7 +218,7 @@ for idx in "${!SERVERS[@]}"; do
         SKIP_COUNT=$((SKIP_COUNT + 1))
         SKIP_SERVERS+=("$server")
         echo -e "  ${BLUE}${B}⊙ Skipped${R}  $server"
-        echo -e "  ${D}→ Utilizador matilda-srv, chave e sudo NOPASSWD já existem; nada a fazer.${R}"
+        echo -e "  ${D}→ Utilizador $SVC_ACC_USER e sudo NOPASSWD já existem; nada a fazer.${R}"
         echo ""
         continue
     fi
@@ -240,7 +231,7 @@ for idx in "${!SERVERS[@]}"; do
         OK_SERVERS+=("$server")
         echo ""
         echo -e "  ${GREEN}${B}✓ Concluído com sucesso${R}  $server"
-        echo -e "  ${D}→ Utilizador matilda-srv criado, chave implantada, sudo sem senha ativo, dependências e SSH verificados.${R}"
+        echo -e "  ${D}→ Utilizador $SVC_ACC_USER criado (acesso com senha), sudo sem senha ativo, dependências e SSH verificados.${R}"
     else
         ssh_exit=$?
         FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -275,6 +266,6 @@ if [[ ${#FAIL_SERVERS[@]} -gt 0 ]]; then
     for s in "${FAIL_SERVERS[@]}"; do echo -e "    ${RED}✗${R} $s"; done
     echo ""
 fi
-echo -e "  ${D}Em cada servidor com sucesso: utilizador matilda-srv, chave SSH, sudo NOPASSWD, bc/net-tools e SSH ativo.${R}"
+echo -e "  ${D}Em cada servidor com sucesso: utilizador $SVC_ACC_USER (login por senha), sudo NOPASSWD, bc/net-tools e SSH ativo.${R}"
 echo -e "${CYAN}${B}═══════════════════════════════════════════════════════════════════════════${R}"
 echo ""
