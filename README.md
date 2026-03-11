@@ -53,7 +53,7 @@ Em **cada servidor** da lista, o script:
 | Passo | Descrição |
 |-------|-----------|
 | 1 | Cria o utilizador (default: `matilda-svc-acc`) com bash e home, e define a senha. |
-| 2 | Configura sudo sem senha em `/etc/sudoers.d/<utilizador>` (NOPASSWD, !requiretty). |
+| 2 | Configura sudo sem senha em `/etc/sudoers.d/<utilizador>` (NOPASSWD e `Defaults:user !requiretty`, para evitar erros em automação sem TTY). |
 | 3 | Comenta `Defaults requiretty` em `/etc/sudoers` (se existir). |
 | 4 | Ativa `PasswordAuthentication` no sshd (ficheiro principal e `sshd_config.d/`), valida com `sshd -t` e reinicia o serviço SSH. |
 | 5 | Instala dependências: `bc` e `net-tools` (yum ou apt). |
@@ -164,7 +164,21 @@ curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/scrip
 | Falha de conexão SSH (timeout, refused) | Rede, firewall ou endereço em `servers.txt`; confirme porta 22. |
 | "Permission denied (publickey)" | A chave em `SSH_KEY` não está em `~/.ssh/authorized_keys` do utilizador em `user@host`. |
 | Host key verification failed | O script usa `StrictHostKeyChecking=accept-new`; na primeira ligação a chave do host é aceite. |
-| SSH bloqueado (infra.ti / matilda-svc-acc não conseguem logar) | Se um script antigo alterou o sshd sem reiniciar ou sem corrigir `sshd_config.d/`, entre como root (consola) e execute: `sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config`; `sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config.d/*.conf 2>/dev/null`; `sudo sshd -t` e, sem erros, `sudo systemctl restart ssh` (ou `sshd`). |
+| SSH bloqueado (infra.ti / matilda-svc-acc não conseguem logar) | Entre como **root** (consola) e execute os comandos da [Verificação final](#verificação-final-teste-real) abaixo. Depois teste com `ssh matilda-svc-acc@localhost` (senha do utilizador). |
+
+### Verificação final (teste real)
+
+Para destravar uma máquina com *Permission denied (publickey)* e validar que a lógica do script está correta, execute **como root** na máquina problemática:
+
+```bash
+sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sudo find /etc/ssh/sshd_config.d/ -type f -name '*.conf' -exec sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' {} +
+sudo sshd -t && sudo systemctl restart ssh
+```
+
+(Se o serviço for `sshd` em vez de `ssh`, use `sudo systemctl restart sshd`.)
+
+**Teste:** se conseguir logar com `ssh matilda-svc-acc@localhost` (e a senha do utilizador), o script está validado para o restante do parque.
 
 ---
 
