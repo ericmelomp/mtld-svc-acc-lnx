@@ -29,10 +29,10 @@ Configuração remota da **conta de serviço** em servidores Linux (utilizador c
 
 2. **Lista de servidores**: ficheiro com um `user@host` por linha (ex.: `servers.txt` no diretório atual ou `~/tmp/.mtld-svc-acc/servers.txt` quando executado via `curl|bash`).
 
-3. **Executar**:
+3. **Executar** (sem cache — sempre a versão mais recente do repositório):
 
    ```bash
-   curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh | bash
+   curl -sL -H "Cache-Control: no-cache" "https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh?$(date +%s)" | bash
    ```
 
    Ou, com o repositório clonado:
@@ -106,7 +106,7 @@ export SSH_KEY_PASSPHRASE='senha_da_chave'
 export MATILDA_SVC_ACC_PASSWORD='senha_do_servico'
 export SVC_ACC_USER='matilda-svc-acc'
 export SERVER_LIST='servers.txt'
-curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh | bash
+curl -sL -H "Cache-Control: no-cache" "https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh?$(date +%s)" | bash
 ```
 
 ---
@@ -132,7 +132,7 @@ curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/scrip
 3. **Executar**  
    Via curl (recomendado) ou localmente:
    ```bash
-   curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh | bash
+   curl -sL -H "Cache-Control: no-cache" "https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh?$(date +%s)" | bash
    ```
    ou
    ```bash

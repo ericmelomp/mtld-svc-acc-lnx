@@ -6,7 +6,7 @@
 #    export SSH_KEY='...'
 #    export SSH_KEY_PASSPHRASE='...'
 #    export MATILDA_SVC_ACC_PASSWORD='...'
-#    curl -s https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh | bash
+#    curl -sL -H "Cache-Control: no-cache" "https://raw.githubusercontent.com/ericmelomp/mtld-svc-acc-lnx/main/script.sh?$(date +%s)" | bash
 #
 #  Variáveis obrigatórias:
 #    SSH_KEY                    Caminho da chave .pem para conectar aos servidores
@@ -248,14 +248,15 @@ for idx in "${!SERVERS[@]}"; do
     echo -e "${MAGENTA}${B}│${R}  ${B}Servidor ${current}/${TOTAL}${R}  ${CYAN}${server}${R}"
     echo -e "${MAGENTA}${B}└─────────────────────────────────────────────────────────────────────────┘${R}"
 
-    if ssh "${SSH_OPTS[@]}" "$server" "$CHECK_ALREADY_CMD" 2>/dev/null; then
-        SKIP_COUNT=$((SKIP_COUNT + 1))
-        SKIP_SERVERS+=("$server")
-        echo -e "  ${BLUE}${B}⊙ Skipped${R}  $server"
-        echo -e "  ${D}→ Utilizador $SVC_ACC_USER e sudo NOPASSWD já existem; nada a fazer.${R}"
-        echo ""
-        continue
-    fi
+    # Opção A: comentar o bloco abaixo para forçar execução em todos (ex.: aplicar correções SSH em máquinas já "configuradas"). Depois de corrigir, descomente para voltar ao skip.
+    # if ssh "${SSH_OPTS[@]}" "$server" "$CHECK_ALREADY_CMD" 2>/dev/null; then
+    #     SKIP_COUNT=$((SKIP_COUNT + 1))
+    #     SKIP_SERVERS+=("$server")
+    #     echo -e "  ${BLUE}${B}⊙ Skipped${R}  $server"
+    #     echo -e "  ${D}→ Utilizador $SVC_ACC_USER e sudo NOPASSWD já existem; nada a fazer.${R}"
+    #     echo ""
+    #     continue
+    # fi
 
     echo -e "  ${D}Saída dos comandos no servidor:${R}"
     echo ""
