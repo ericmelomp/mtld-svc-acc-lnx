@@ -128,7 +128,7 @@ fi
 CMD="$(printf '%s && ' "${CMDS[@]}" | sed 's/ && $//')"
 
 # --- Verificação "já configurado" (evita reconfigurar) ---
-CHECK_ALREADY_CMD='sudo id '"$SVC_ACC_USER"' >/dev/null 2>&1 && sudo grep -q NOPASSWD /etc/sudoers.d/'"$SVC_ACC_USER"' 2>/dev/null'
+#CHECK_ALREADY_CMD='sudo id '"$SVC_ACC_USER"' >/dev/null 2>&1 && sudo grep -q NOPASSWD /etc/sudoers.d/'"$SVC_ACC_USER"' 2>/dev/null'
 
 # -----------------------------------------------------------------------------
 #  SSH: opções e carregamento da chave no agente (apenas via export)
