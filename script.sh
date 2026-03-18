@@ -16,6 +16,7 @@
 #  Variáveis opcionais:
 #    SVC_ACC_USER   Nome do utilizador nos alvos (default: matilda-svc-acc)
 #    SERVER_LIST    Ficheiro com lista user@host (default: servers.txt ou ~/tmp/.mtld-svc-acc/servers.txt)
+#    SSH_DEBUG      1 para ativar debug do SSH (ssh -vvv + LogLevel=DEBUG3)
 #
 #  Acesso nos servidores: utilizador com senha (sem chaves .pem).
 #
@@ -67,6 +68,7 @@ SSH_KEY_PASSPHRASE="${SSH_KEY_PASSPHRASE:-}"
 SVC_ACC_USER="${SVC_ACC_USER:-matilda-svc-acc}"
 MATILDA_SVC_ACC_PASSWORD="${MATILDA_SVC_ACC_PASSWORD:-}"
 RESULT_FILE="${RESULT_FILE:-result.txt}"
+SSH_DEBUG="${SSH_DEBUG:-0}"
 
 # --- Diretório do script (ou ~/tmp/.mtld-svc-acc quando executado via curl|bash) ---
 if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
@@ -133,7 +135,12 @@ CMD="$(printf '%s && ' "${CMDS[@]}" | sed 's/ && $//')"
 # -----------------------------------------------------------------------------
 #  SSH: opções e carregamento da chave no agente (apenas via export)
 # -----------------------------------------------------------------------------
-SSH_OPTS=(-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR)
+SSH_OPTS=(-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+if [[ "$SSH_DEBUG" == "1" || "$SSH_DEBUG" == "true" ]]; then
+    SSH_OPTS+=(-vvv -o LogLevel=DEBUG3)
+else
+    SSH_OPTS+=(-o LogLevel=ERROR)
+fi
 [[ -n "$SSH_KEY" ]] && SSH_OPTS+=(-i "$SSH_KEY")
 
 AGENT_STARTED=
@@ -180,6 +187,17 @@ exec 3>&1
 exec 1> >(tee >(sed $'s/\033\\[[0-9;]*m//g' > "$RESULT_FILE") >&3)
 exec 2>&1
 
+# --- Nota sobre debug ---
+if [[ "$SSH_DEBUG" == "1" || "$SSH_DEBUG" == "true" ]]; then
+    echo -e "${YELLOW}${B}SSH_DEBUG ligado.${R} O script vai executar `ssh` com mais detalhes (-vvv / LogLevel=DEBUG3)."
+    echo -e "${D}Se vires `kex_exchange_identification: read: Connection reset by peer`, causas prováveis incluem:${R}"
+    echo -e "  ${D}• reset antes do handshake (firewall/IDS/anti-bot ou regras na porta 22/SSH)${R}"
+    echo -e "  ${D}• `sshd` a derrubar a ligação (config/limites/instabilidade)${R}"
+    echo -e "  ${D}• incompatibilidade de algoritmos/criptografia (KEX/hostkey/ciphers)${R}"
+    echo -e "${D}Dica: as linhas de handshake vão aparecer no `result.txt`.${R}"
+    echo ""
+fi
+
 # --- Banner ---
 echo -e "${MAGENTA}"
 echo " .d8888b.                                 .d8888b.                    888          "
@@ -223,7 +241,7 @@ echo -e "  ${D}4.${R} Ativar PasswordAuthentication no sshd (principal + sshd_co
 echo -e "  ${D}5.${R} Instalar dependências: bc, net-tools (yum ou apt)"
 echo -e "  ${D}6.${R} Testar sudo sem senha (sudo whoami → root)"
 echo -e "  ${D}7.${R} Garantir que o serviço SSH está ativo (sshd ou ssh)"
-echo -e "  ${D}→ Se o servidor já tiver $SVC_ACC_USER e sudo NOPASSWD, será omitido.${R}"
+echo -e "  ${D}→ Nota: a omissão por \"já configurado\" está desativada neste momento (CHECK_ALREADY_CMD comentado).${R}"
 echo ""
 echo -e "  ${D}Chave SSH (conexão do executor):${R} $SSH_KEY"
 echo -e "  ${D}Resultado guardado em:${R} $RESULT_FILE"
@@ -272,7 +290,12 @@ for idx in "${!SERVERS[@]}"; do
         FAIL_SERVERS+=("$server")
         echo ""
         echo -e "  ${RED}${B}✗ Falha${R}  $server (código de saída: $ssh_exit)"
-        echo -e "  ${D}→ Verifique a saída acima e a conectividade/permissões no servidor.${R}" >&2
+        if [[ "$ssh_exit" -eq 255 ]]; then
+            echo -e "  ${D}→ Possível causa: o SSH foi resetado antes do handshake (firewall/IDS, `sshd` a derrubar, ou incompatibilidade de algoritmos KEX/cripto).${R}" >&2
+            echo -e "  ${D}→ Ativa `SSH_DEBUG=1` para ver detalhes no `result.txt`.${R}" >&2
+        else
+            echo -e "  ${D}→ Verifique a saída acima e a conectividade/permissões no servidor.${R}" >&2
+        fi
     fi
     echo ""
 done
